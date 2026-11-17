@@ -1,0 +1,492 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id       Int      @id @default(autoincrement())
+  email    String   @unique
+  username String   @unique
+  name     String?
+  password String
+  role     UserRole @default(USER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects     Project[]
+  branches     Branch[]
+  activities   Activity[]
+  participants Participant[]
+
+  @@map("users")
+  @@index([email])
+  @@index([username])
+}
+
+enum UserRole {
+  ADMIN 
+  USER
+  SUPERVISOR
+}
+
+enum Programme {
+  SELP
+  TBCP
+  MEP
+  WASH
+  Migration
+  BEP
+  BHP
+  UPGP
+  UDP
+  DRMP
+  SDP
+  MF
+  IDP
+  CCP
+}
+
+model Division {
+  id Int @id @default(autoincrement())
+  name String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  districts District[]
+  projects Project[]
+
+  @@map("divisions")
+  @@index([name])
+  branches Branch[]
+}
+
+model District {
+  id Int @id @default(autoincrement())
+  name String
+  divisionId Int
+  division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  upazillas Upazilla[]
+  projects Project[]
+  branches Branch[]
+
+  @@map("districts")
+  @@unique([name, divisionId])
+  @@index([name])
+  @@index([divisionId])
+}
+
+model Upazilla {
+  id Int @id @default(autoincrement())
+  name String
+  districtId Int
+  district District @relation(fields: [districtId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches Branch[]
+  projects Project[]
+  unions Union[]
+
+  @@map("upazillas")
+  @@unique([name, districtId])
+  @@index([name])
+  @@index([districtId])
+}
+
+model Union{
+  id Int @id @default(autoincrement())
+  name String
+  upazillaId Int
+  upazilla Upazilla @relation(fields: [upazillaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+  branches Branch[] @relation("BranchToUnion")
+  
+  @@map("unions")
+  @@unique([name, upazillaId])
+  @@index([name])
+  @@index([upazillaId])
+}
+
+model Donor {
+  id Int @id @default(autoincrement())
+  donorName String @unique
+  donorType String?
+  description String? @db.Text
+  country String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("donors")
+  @@index([donorName])
+}
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @unique
+
+  divisionId Int
+  division   Division @relation(fields: [divisionId], references: [id])
+
+  districtId Int
+  district   District @relation(fields: [districtId], references: [id])
+
+  upazillaId Int
+  upazilla   Upazilla @relation(fields: [upazillaId], references: [id])
+
+  unionId   Int?
+  union     Union?   @relation("BranchToUnion", fields: [unionId], references: [id])
+  address String?
+  phone String?
+  email String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+  activities Activity[]
+  users User[]
+  participants Participant[]
+  activityAchievements ActivityAchievement[]
+
+  @@unique([name, districtId])
+  @@index([name])
+  @@index([districtId])
+  @@index([upazillaId])
+}
+
+model Project {
+  id        Int      @id @default(autoincrement())
+  projectId String   @unique
+  projectName String
+  projectType String?
+  projectDuration Int? // duration in months
+  programme Programme
+
+  donorId   Int
+  donor     Donor    @relation(fields: [donorId], references: [id], onDelete: Restrict)
+
+  districtId Int
+  district   District @relation(fields: [districtId], references: [id], onDelete: Cascade)
+
+  upazillaId Int
+  upazilla   Upazilla @relation(fields: [upazillaId], references: [id], onDelete: Cascade)
+
+  branchId   Int
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  // Financial
+  budget      Decimal  @db.Decimal(15, 2)
+  currency    String   @default("BDT")
+  status    ParticipantStatus @default(ACTIVE)
+  
+  // Targets
+  totalTarget   Int @default(0)
+  targetMale    Int @default(0)
+  targetFemale  Int @default(0)
+  targetOther   Int @default(0)
+  targetDisabled Int @default(0)
+
+  startDate DateTime
+  endDate   DateTime
+  isActive Boolean @default(true)
+  discription String? @db.Text
+  objectives String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  indicators Indicator[]
+  activities Activity[]
+  participants Participant[]
+  divisions Division[]
+  unions Union[]
+  users User[]
+
+  @@map("projects")
+  @@unique([projectName, branchId])
+  @@index([projectName])
+  @@index([donorId])
+  @@index([districtId])
+  @@index([upazillaId])
+  @@index([branchId])
+  @@index([programme])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model Indicator {
+  id            String   @id @default(cuid())
+  indicatorCode String   @unique
+  indicatorName String
+  description   String?  @db.Text
+  
+  projectId     Int
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  // Indicator Type
+  category      IndicatorCategory
+  unit          String   @default("Number") // e.g., Number, Percentage, Amount
+  
+  // Targets
+  targetValue   Decimal  @db.Decimal(15, 2)
+  baselineValue Decimal? @db.Decimal(15, 2)
+  achievedValue Decimal  @default(0) @db.Decimal(15, 2)
+  
+  // Disaggregation
+  targetMale    Int @default(0)
+  targetFemale  Int @default(0)
+  targetOther   Int @default(0)
+  
+  achievedMale   Int @default(0)
+  achievedFemale Int @default(0)
+  achievedOther  Int @default(0)
+  
+  // Frequency
+  reportingFrequency ReportingFrequency @default(MONTHLY)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  activities Activity[]
+  
+  @@index([projectId])
+  @@index([category])
+  @@map("indicators")
+}
+
+enum IndicatorCategory {
+  OUTPUT
+  OUTCOME
+  IMPACT
+  PROCESS
+}
+
+enum ReportingFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  activityName String
+  activityCode String   @unique
+
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  branchId   Int
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  totalParticipants Int @default(0)
+  male Int @default(0)
+  female Int @default(0)
+  others Int @default(0)
+
+  disabledMale Int @default(0)
+  disabledFemale Int @default(0)
+  disabledOthers Int @default(0)
+  
+  status ActivityStatus @default(Pending)
+  remarks String? @db.Text
+  
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  indicators Indicator[]
+  participants Participant[]
+  users User[]
+  achievements ActivityAchievement[]
+
+  @@unique([activityName, projectId])
+  @@index([activityName])
+  @@index([projectId])
+  @@index([status])
+}
+
+enum ActivityStatus {
+  Pending
+  Ongoing
+  Completed
+  Cancelled
+}
+
+enum MeasurementFrequency {
+  Monthly
+  Quarterly
+  BiAnnual
+  Annual
+}
+
+model ActivityAchievement {
+  id String @id @default(cuid())
+  month String // "YYYY-MM"
+  programme Programme? // if needed
+
+  activityId String
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  branchId Int
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  total Int @default(0)
+  male Int @default(0)
+  female Int @default(0)
+  others Int @default(0)
+
+  disabledMale Int @default(0)
+  disabledFemale Int @default(0)
+  disabledOthers Int @default(0)
+
+  remarks String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, activityId, branchId])
+  @@index([month])
+  @@index([activityId])
+}
+
+model Participant {
+  id              Int      @id @default(autoincrement())
+  // Personal Information
+  fullName        String
+  fatherName      String?
+  motherName      String?
+  gender          String?
+  dateOfBirth     DateTime?
+  age             Int?
+  nid             String?
+   
+  projectId       Int
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  activityId      String?
+  activity        Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  branchId       Int
+  branch         Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+    
+  // Contact
+  phone           String?
+  email           String?
+  
+  // Address (same structure as project)
+  district        String
+  upazila         String
+  union           String
+  village         String?
+  
+  // Demographics
+  maritalStatus   MaritalStatus?
+  education       EducationLevel?
+  occupation      String?
+  
+  // Special Categories
+  isDisabled      Boolean  @default(false)
+  disabilityType  String?
+  isMinority      Boolean  @default(false)
+  
+  // Household Information
+  householdHead   Boolean  @default(false)
+  familyMembers   Int?
+  monthlyIncome   Decimal? @db.Decimal(10, 2)
+  
+  photoUrl        String?
+  remarks         String?  @db.Text
+  
+  enrollmentDate  DateTime @default(now())
+  status          ParticipantStatus @default(ACTIVE)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users User[]
+  
+  @@map("participants")
+  @@index([projectId])
+  @@index([activityId])
+  @@index([gender])
+  @@index([status])
+}
+// ==================== Enums ====================
+
+enum DonorType {
+  GOVERNMENT
+  INTERNATIONAL
+  PRIVATE
+  NGO
+  BILATERAL
+  MULTILATERAL
+  CORPORATE
+  INDIVIDUAL
+}
+
+enum ProjectStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  EVALUATION
+}
+
+enum IndicatorType {
+  OUTPUT
+  OUTCOME
+  IMPACT
+  PROCESS
+  INPUT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+}
+
+enum EducationLevel {
+  ILLITERATE
+  PRIMARY
+  SECONDARY
+  SSC
+  HSC
+  GRADUATE
+  POST_GRADUATE
+  VOCATIONAL
+  OTHER
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  COMPLETED
+  DROPOUT
+  SUSPENDED
+  TRANSFERRED
+}
